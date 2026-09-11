@@ -1,0 +1,9 @@
+http:
+  access_token: "put_personal_access_token_here"
+  request_per_minute: 150
+  retry_after: 30
+  retry_attempts: 3
+
+extractor:
+  interval: "5m"
+  output_file: "output/asana_objects.json"

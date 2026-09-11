@@ -1,0 +1,4 @@
+bin/
+output/
+config/config.yaml
+.idea
