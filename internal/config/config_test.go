@@ -15,7 +15,7 @@ http:
   retry_attempts: 0
 extractor:
   interval: ""
-  output_file: ""
+  output_dir: ""
   page_limit: 0
 `
 
@@ -39,11 +39,47 @@ extractor:
 	if cfg.Extractor.Interval != DefaultInterval {
 		t.Fatalf("Interval = %s, want %s", cfg.Extractor.Interval, DefaultInterval)
 	}
-	if cfg.Extractor.OutputFile != DefaultOutputFile {
-		t.Fatalf("OutputFile = %q, want %q", cfg.Extractor.OutputFile, DefaultOutputFile)
+	if cfg.Extractor.OutputDir != DefaultOutputDir {
+		t.Fatalf("OutputDir = %q, want %q", cfg.Extractor.OutputDir, DefaultOutputDir)
 	}
 	if cfg.Extractor.PageLimit != DefaultPageLimit {
 		t.Fatalf("PageLimit = %d, want %d", cfg.Extractor.PageLimit, DefaultPageLimit)
+	}
+}
+
+func TestLoadFromReaderReadsOutputDir(t *testing.T) {
+	input := `
+http:
+  access_token: "token"
+extractor:
+  interval: "5m"
+  output_dir: "custom-output"
+`
+
+	cfg, err := LoadFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("LoadFromReader returned error: %v", err)
+	}
+	if cfg.Extractor.OutputDir != "custom-output" {
+		t.Fatalf("OutputDir = %q, want custom-output", cfg.Extractor.OutputDir)
+	}
+}
+
+func TestLoadFromReaderUsesLegacyOutputFileDirectory(t *testing.T) {
+	input := `
+http:
+  access_token: "token"
+extractor:
+  interval: "5m"
+  output_file: "legacy/asana_objects.json"
+`
+
+	cfg, err := LoadFromReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("LoadFromReader returned error: %v", err)
+	}
+	if cfg.Extractor.OutputDir != "legacy" {
+		t.Fatalf("OutputDir = %q, want legacy", cfg.Extractor.OutputDir)
 	}
 }
 

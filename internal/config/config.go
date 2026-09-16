@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -17,7 +18,7 @@ const (
 	DefaultRetryAfter       = 30
 	DefaultRetryAttempts    = 3
 	DefaultInterval         = 5 * time.Minute
-	DefaultOutputFile       = "output/asana_objects.json"
+	DefaultOutputDir        = "output"
 	DefaultPageLimit        = 100
 )
 
@@ -27,9 +28,9 @@ type Config struct {
 }
 
 type ExtractorConfig struct {
-	Interval   time.Duration
-	OutputFile string
-	PageLimit  int
+	Interval  time.Duration
+	OutputDir string
+	PageLimit int
 }
 
 func Load(path string) (Config, error) {
@@ -61,9 +62,13 @@ func LoadFromReader(reader io.Reader) (Config, error) {
 			RetryAttempts:    intValue(rawConfig, "http", "retry_attempts"),
 		},
 		Extractor: ExtractorConfig{
-			OutputFile: value(rawConfig, "extractor", "output_file"),
-			PageLimit:  intValue(rawConfig, "extractor", "page_limit"),
+			OutputDir: value(rawConfig, "extractor", "output_dir"),
+			PageLimit: intValue(rawConfig, "extractor", "page_limit"),
 		},
+	}
+	legacyOutputFile := value(rawConfig, "extractor", "output_file")
+	if config.Extractor.OutputDir == "" && legacyOutputFile != "" {
+		config.Extractor.OutputDir = filepath.Dir(legacyOutputFile)
 	}
 
 	if config.HTTP.AccessToken == "" {
@@ -107,9 +112,9 @@ func (config *Config) Normalize() error {
 		return fmt.Errorf("extractor.interval must be either 5m or 30s")
 	}
 
-	config.Extractor.OutputFile = strings.TrimSpace(config.Extractor.OutputFile)
-	if config.Extractor.OutputFile == "" {
-		config.Extractor.OutputFile = DefaultOutputFile
+	config.Extractor.OutputDir = strings.TrimSpace(config.Extractor.OutputDir)
+	if config.Extractor.OutputDir == "" {
+		config.Extractor.OutputDir = DefaultOutputDir
 	}
 
 	if config.Extractor.PageLimit <= 0 {

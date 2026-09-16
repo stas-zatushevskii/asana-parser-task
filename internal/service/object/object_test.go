@@ -158,7 +158,7 @@ func (repo *fakeRepository) SaveObjects(objects []domain.Object) (string, error)
 		onSave()
 	}
 
-	return "output/asana_objects.json", nil
+	return "output", nil
 }
 
 func (repo *fakeRepository) savedObjects() []domain.Object {

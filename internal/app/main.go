@@ -19,6 +19,6 @@ func New(configPath string) (*serviceobject.Object, error) {
 			PageLimit: cfg.Extractor.PageLimit,
 		},
 		transporthttp.NewClient(cfg.HTTP),
-		repository.New(cfg.Extractor.OutputFile),
+		repository.New(cfg.Extractor.OutputDir),
 	), nil
 }
