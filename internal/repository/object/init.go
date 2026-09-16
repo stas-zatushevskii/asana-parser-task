@@ -3,16 +3,11 @@ package object
 import domain "asana/internal/domain/object"
 
 type Repository struct {
-	outputPath string
+	outputDir string
 }
 
-func New(outputPath string) *Repository {
-	return &Repository{outputPath: outputPath}
-}
-
-type FileStructure struct {
-	Users    []UserObject    `json:"users"`
-	Projects []ProjectObject `json:"projects"`
+func New(outputDir string) *Repository {
+	return &Repository{outputDir: outputDir}
 }
 
 type UserObject struct {

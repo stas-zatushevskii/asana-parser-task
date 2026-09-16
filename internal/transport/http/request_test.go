@@ -6,6 +6,7 @@ import (
 	nethttp "net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -45,6 +46,7 @@ type clientCase struct {
 	wantAttempts  int
 	wantSleeps    []time.Duration
 	wantPath      string
+	wantQueries   []string
 	forbidSleeper bool
 }
 
@@ -312,7 +314,7 @@ func TestClientResponses(t *testing.T) {
 func TestClientEndpointBehavior(t *testing.T) {
 	tests := []clientCase{
 		{
-			name:   "users ignores next page",
+			name:   "users follows next page",
 			target: targetUsers,
 			limit:  2,
 			config: Config{AccessToken: "test-token", RetryAttempts: 1},
@@ -323,12 +325,38 @@ func TestClientEndpointBehavior(t *testing.T) {
 					},
 					"next_page": map[string]string{"offset": "next-users"},
 				}),
+				jsonStep(nethttp.StatusOK, map[string]any{
+					"data": []map[string]string{
+						{"gid": "u2", "resource_type": "user", "name": "Grace"},
+					},
+				}),
 			},
 			want: []domain.Object{
 				{GID: "u1", ResourceType: domain.User, Name: "Ada"},
+				{GID: "u2", ResourceType: domain.User, Name: "Grace"},
 			},
-			wantAttempts: 1,
+			wantAttempts: 2,
 			wantPath:     "/users",
+			wantQueries:  []string{"limit=2", "limit=2&offset=next-users"},
+		},
+		{
+			name:   "second page error returns error",
+			target: targetUsers,
+			limit:  2,
+			config: Config{AccessToken: "test-token", RetryAttempts: 1},
+			steps: []apiStep{
+				jsonStep(nethttp.StatusOK, map[string]any{
+					"data": []map[string]string{
+						{"gid": "u1", "resource_type": "user", "name": "Ada"},
+					},
+					"next_page": map[string]string{"offset": "next-users"},
+				}),
+				errorStep(nethttp.StatusInternalServerError, "temporary"),
+			},
+			wantErr:      true,
+			wantAttempts: 2,
+			wantPath:     "/users",
+			wantQueries:  []string{"limit=2", "limit=2&offset=next-users"},
 		},
 		{
 			name:   "projects preserve resource subtype",
@@ -390,7 +418,7 @@ func TestClientEndpointBehavior(t *testing.T) {
 			wantPath:     "/projects",
 		},
 		{
-			name:   "limit argument is ignored",
+			name:   "limit argument is sent",
 			target: targetUsers,
 			limit:  101,
 			config: Config{AccessToken: "test-token", RetryAttempts: 1},
@@ -508,6 +536,11 @@ func assertRequests(t *testing.T, requests []capturedRequest, tt clientCase) {
 	}
 
 	for _, request := range requests {
+		wantQuery := "limit=" + strconv.Itoa(tt.limit)
+		if len(tt.wantQueries) > 0 {
+			wantQuery = tt.wantQueries[request.requestID-1]
+		}
+
 		if request.auth != "Bearer "+tt.config.AccessToken {
 			t.Fatalf("request %d Authorization = %q, want %q", request.requestID, request.auth, "Bearer "+tt.config.AccessToken)
 		}
@@ -517,8 +550,8 @@ func assertRequests(t *testing.T, requests []capturedRequest, tt clientCase) {
 		if request.path != tt.wantPath {
 			t.Fatalf("request %d path = %q, want %q", request.requestID, request.path, tt.wantPath)
 		}
-		if request.rawQuery != "" {
-			t.Fatalf("request %d raw query = %q, want empty query", request.requestID, request.rawQuery)
+		if request.rawQuery != wantQuery {
+			t.Fatalf("request %d raw query = %q, want %q", request.requestID, request.rawQuery, wantQuery)
 		}
 	}
 }

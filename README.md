@@ -1,21 +1,23 @@
 # Asana Extractor
 
-Small Go service that periodically exports Asana users and projects to a JSON file.
+Small Go service that periodically exports Asana users and projects to JSON files.
 
 ## What It Does
 
 - Calls `GET https://app.asana.com/api/1.0/users`
 - Calls `GET https://app.asana.com/api/1.0/projects`
+- Follows Asana pagination with `limit` and `next_page.offset`
 - Uses Bearer token authorization with an Asana personal access token
 - Retries `429` and `5xx` responses
 - Respects `Retry-After` on `429`
-- Writes one JSON file:
+- Writes one JSON file per exported object:
 
-```json
-{
-  "users": [],
-  "projects": []
-}
+```text
+output/
+├── users/
+│   └── user_<gid>.json
+└── projects/
+    └── project_<gid>.json
 ```
 
 ## Configure
@@ -37,10 +39,11 @@ http:
 
 extractor:
   interval: "5m"
-  output_file: "output/asana_objects.json"
+  output_dir: "output"
+  page_limit: 100
 ```
 
-If numeric values are empty or zero, the app uses defaults. The access token is required.
+If numeric values are empty or zero, the app uses defaults. `page_limit` is capped at `100`. The access token is required.
 
 ## Run
 
@@ -66,7 +69,7 @@ Docker:
 make docker-run
 ```
 
-Docker mounts the project `./output` folder into `/app/output`, so the exported file is written to `./output/asana_objects.json` on the host.
+Docker mounts the project `./output` folder into `/app/output`, so exported files are written under `./output/users` and `./output/projects` on the host.
 `make run` and `make docker-run` require `config/config.yaml` to exist and to contain a real token instead of the placeholder.
 
 Direct Docker run:
@@ -93,9 +96,6 @@ make docker-logs
 ```
 
 ## Improvements
-
-- Implement paginated Asana requests.
-  The service already has `extractor.page_limit`, but the HTTP client currently fetches only one page and ignores the limit argument. Requests should pass `limit` and continue with `next_page.offset` until Asana returns no next page.
 
 - Add a shared cache for extracted Asana data.
   When multiple service instances run at the same time, they should first check a shared Redis cache with TTL before calling Asana. If another instance has already fetched fresh users or projects, the current instance should reuse those cached results instead of duplicating API calls.

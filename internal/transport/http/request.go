@@ -79,28 +79,37 @@ func NewClient(config Config, options ...Option) *Client {
 	return client
 }
 
-func (client *Client) FetchUsers(ctx context.Context, _ int) ([]domain.Object, error) {
-	return client.fetchObjects(ctx, getAllUsersEndpoint, domain.User)
+func (client *Client) FetchUsers(ctx context.Context, limit int) ([]domain.Object, error) {
+	return client.fetchObjects(ctx, getAllUsersEndpoint, domain.User, limit)
 }
 
-func (client *Client) FetchProjects(ctx context.Context, _ int) ([]domain.Object, error) {
-	return client.fetchObjects(ctx, getAllProjectsEndpoint, domain.Project)
+func (client *Client) FetchProjects(ctx context.Context, limit int) ([]domain.Object, error) {
+	return client.fetchObjects(ctx, getAllProjectsEndpoint, domain.Project, limit)
 }
 
-func (client *Client) fetchObjects(ctx context.Context, endpoint string, resourceType domain.ResourceType) ([]domain.Object, error) {
-	page, err := client.fetchPage(ctx, endpoint)
-	if err != nil {
-		return nil, err
-	}
-
+func (client *Client) fetchObjects(ctx context.Context, endpoint string, resourceType domain.ResourceType, limit int) ([]domain.Object, error) {
 	objects := make([]domain.Object, 0)
-	for _, item := range page.Data {
-		objects = append(objects, domain.Object{
-			GID:             item.GID,
-			ResourceType:    normalizeResourceType(item.ResourceType, resourceType),
-			ResourceSubType: item.ResourceSubType,
-			Name:            item.Name,
-		})
+	offset := ""
+
+	for {
+		page, err := client.fetchPage(ctx, endpoint, limit, offset)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, item := range page.Data {
+			objects = append(objects, domain.Object{
+				GID:             item.GID,
+				ResourceType:    normalizeResourceType(item.ResourceType, resourceType),
+				ResourceSubType: item.ResourceSubType,
+				Name:            item.Name,
+			})
+		}
+
+		offset = page.NextPage.Offset
+		if offset == "" {
+			break
+		}
 	}
 
 	return objects, nil
@@ -113,14 +122,14 @@ func normalizeResourceType(value string, fallback domain.ResourceType) domain.Re
 	return domain.ResourceType(value)
 }
 
-func (client *Client) fetchPage(ctx context.Context, endpoint string) (asanaPage, error) {
+func (client *Client) fetchPage(ctx context.Context, endpoint string, limit int, offset string) (asanaPage, error) {
 	var page asanaPage
 	err := retry.Do(ctx, client.config.RetryAttempts, time.Duration(client.config.RetryAfter)*time.Second, client.sleep, func(attempt int) (bool, time.Duration, error) {
 		if err := client.limiter.Wait(ctx); err != nil {
 			return false, 0, err
 		}
 
-		requestURL, err := client.buildURL(endpoint)
+		requestURL, err := client.buildURL(endpoint, limit, offset)
 		if err != nil {
 			return false, 0, err
 		}
@@ -163,11 +172,19 @@ func (client *Client) fetchPage(ctx context.Context, endpoint string) (asanaPage
 	return page, nil
 }
 
-func (client *Client) buildURL(endpoint string) (string, error) {
+func (client *Client) buildURL(endpoint string, limit int, offset string) (string, error) {
 	parsed, err := url.Parse(client.baseURL + "/" + strings.TrimLeft(endpoint, "/"))
 	if err != nil {
 		return "", err
 	}
+	query := parsed.Query()
+	if limit > 0 {
+		query.Set("limit", strconv.Itoa(limit))
+	}
+	if offset != "" {
+		query.Set("offset", offset)
+	}
+	parsed.RawQuery = query.Encode()
 
 	return parsed.String(), nil
 }
@@ -186,7 +203,12 @@ func retryAfter(value string) time.Duration {
 }
 
 type asanaPage struct {
-	Data []asanaObject `json:"data"`
+	Data     []asanaObject `json:"data"`
+	NextPage asanaNextPage `json:"next_page"`
+}
+
+type asanaNextPage struct {
+	Offset string `json:"offset"`
 }
 
 type asanaObject struct {
